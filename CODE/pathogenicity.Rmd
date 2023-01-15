@@ -1,0 +1,288 @@
+---
+title: "Article 3"
+author: "Ascari et al."
+output: 
+  html_document:
+    code_folding: hide
+    font-family: Oswald
+    highlight: pygments
+    theme: journal
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r knitr_init, cache=FALSE, include=FALSE}
+library(knitr)
+library(rmdformats)
+
+options(max.print="95")
+opts_chunk$set(echo=FALSE,
+	             cache=TRUE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+Sys.setlocale("LC_ALL", "pt_BR.UTF-8")
+
+```
+
+# Packages
+
+```{r include=FALSE}
+
+library(tidyverse)
+library(gsheet)
+library(ggthemes)
+
+```
+
+#Import Raw inf
+
+```{r}
+raw = gsheet2tbl("https://docs.google.com/spreadsheets/d/1KnJ9N8jqKPMjCt8jCLv7OqYL9hLyYeK8wkGEBmlGSVI/edit?usp=sharing")
+raw_inf = raw %>% 
+  dplyr::select(code, year, State, city, host, distance_wheat,region, species) %>% 
+  dplyr::filter(year == "2018" | year == "2019" | year == "CHECK")
+raw_inf
+```
+
+#Leaf data
+
+```{r}
+wlb = gsheet2tbl("https://docs.google.com/spreadsheets/d/11Ltn68PMhMMeL1UszittYkB5_SKXAAkGUQDyMvdqiCs/edit?usp=sharing")
+wlb
+```
+
+##Inf isolates
+
+```{r}
+#Dados dos isolados usados da patogenicidade
+
+subcol = full_join(wlb, raw_inf, by = "code") %>% 
+  dplyr::select(host, region, city, distance_wheat, code, species, host_inoculation) %>%
+  filter(host_inoculation != "NA") %>% 
+  filter(code != "42", code != "132", code != "544", code != "607", code != "CHECK") %>%
+  group_by(host, region, city, distance_wheat, code, species) %>% 
+  summarise() 
+ 
+ 
+subcol
+
+#write.xlsx(subcol, file = "data/Inoculates_codes.xlsx")
+
+```
+
+# Severity
+
+```{r}
+#Transform from pixeis to cm2
+wlb1 = wlb %>%
+  mutate(s1 = s1*(1/235.8862)^2, s2 = s2*(1/235.8862)^2, s3 = s3*(1/235.8862)^2, s4 = s4*(1/235.8862)^2, s5 = s5*(1/235.8862)^2, s6 = s6*(1/235.8862)^2, s7 = s7*(1/235.8862)^2, s8 = s8*(1/235.8862)^2, s9 = s9*(1/235.8862)^2, s10 = s10*(1/235.8862)^2, d1 = d1*(1/235.8862)^2, d2 = d2*(1/235.8862)^2, d3 = d3*(1/235.8862)^2, d4 = d4*(1/235.8862)^2, d5 = d5*(1/235.8862)^2, d6 = d6*(1/235.8862)^2, d7 = d7*(1/235.8862)^2, d8 = d8*(1/235.8862)^2, d9 = d9*(1/235.8862)^2, d10 = d10*(1/235.8862)^2) %>% 
+  
+#Calcule the severity
+dplyr::mutate("1" = (d1*100)/s1, "2" = (d2*100)/s2, "3" = (d3*100)/s3, "4" = (d4*100)/s4, "5" = (d5*100)/s5, "6" = (d6*100)/s6, "7" = (d7*100)/s7, "8" = (d8*100)/s8, "9" = (d9*100)/s9, "10" = (d10*100)/s10) %>% 
+  dplyr::select(1:4, 26:35) %>% 
+  tidyr::gather(key = "leaf", value = "sev", 5:14) %>% 
+  mutate(sev = case_when(sev > 100 ~ 0,
+                         TRUE ~sev))
+
+#Gets the species ID
+wlb2 = full_join(wlb1, raw_inf, by = "code") %>% 
+  dplyr::select(species, test, host_inoculation, code, rep, leaf, sev ) %>%
+  filter(host_inoculation != "NA") %>% 
+  filter(code != "42", code != "132", code != "544", code != "607", code != "CHECK") %>% 
+  mutate(host = case_when(host_inoculation == "BR 18" ~ "BR 18-Terena",
+                          TRUE ~ host_inoculation)) %>% 
+  group_by(test, species, host, code, rep, leaf) %>% 
+  summarise(sev_leaf = mean(sev)) %>% 
+  mutate(host1 = case_when(host == "BR 18-Terena" ~ "Wheat",
+                           host == "BRS Guamirim" ~"Wheat",
+                           host == "Marandu" ~ "Signal grass"))
+ 
+wlb2
+
+wlb2 <- wlb2 %>% 
+  mutate(species2 = case_when(species == "PoT" ~ "PoT",
+                              TRUE ~ "non-PoT"))
+```
+
+## BoxPlot
+
+```{r}
+
+wlb_d = wlb2 %>%
+  group_by(species2, host, code) %>%
+  summarise(sev_leaf = mean(sev_leaf))
+
+
+  leaf = ggplot(wlb_d, aes(x = species2, y = sev_leaf)) +
+  geom_boxplot(aes(color = species2), outlier.color = NA, position = position_dodge(width = .9), alpha = 1, size = 1) +
+  geom_jitter(aes(color = species2), shape = 21, size = 3, position = position_dodge(width = .9), alpha = 0.8) +
+  #scale_color_manual(values = pallet)+
+    facet_wrap(~host)+
+  #scale_color_manual(values = c("gray50", "gray50")) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20))+
+  theme_few() +
+ # theme(panel.grid.minor =  element_blank(), axis.title.y = element_text(size = 11, color = "black"), axis.text = element_text(size = 11, color = "black"), legend.position = "none", legend.justification = "center", legend.key.size = unit(0.7, "cm")) +
+  labs(x = "Lineage", y = "Leaf blast severity (%)", color = "", fill = "") 
+ # annotate(geom="text", x=1.25, y=12, label="0.87%", color="black", size = 4) +
+#  annotate(geom="text", x=2.2, y=12, label="1.77%", color="black", size = 4) +
+#  annotate(geom="text", x=2.8, y=12, label= "0.04%", color="black", size = 4) 
+  
+ 
+ggsave("leaf_sev1.png", dpi = 600, height = 4 , width = 6)  
+
+leaf
+# #Mean values to each low box
+# wlb_d %>%
+#   filter(host == "Marandu", species == "PoT") %>%
+#   group_by(species) %>%
+#   summarise(med = median(sev_leaf))
+# 
+# wlb_d %>%
+#   filter(host == "BR 18-Terena", species == "PoU") %>%
+#   group_by(species) %>%
+#   summarise(med2 = median(sev_leaf))
+# 
+# wlb_d %>%
+#   filter(host != "BRS Guamirim", species == "PoU") %>%
+#   group_by(species) %>%
+#   summarise(med3 = median(sev_leaf))
+
+```
+
+## CI
+
+```{r}
+#Confidence interval
+#wlb_ic = wlb2 %>%
+#  group_by(species, host, code) %>%
+#  summarise(n = length(sev_leaf),
+#            sev_l = mean(sev_leaf),
+#            sev_sd = sd(sev_leaf),
+#            icup = sev_l + qt(0.975, n - 1)*sev_sd/sqrt(n),
+#            iclow = sev_l + qt(0.025, n - 1)*sev_sd/sqrt(n)) %>%
+#  mutate(iclow = case_when(iclow<0 ~ 0,
+#                           TRUE ~ iclow)) %>% 
+#  mutate(host = case_when(host == "BR 18" ~ "BR-18 Terena",
+#                          TRUE ~ host)) %>%
+#  group_by(species, host, code) %>%
+#  summarise(sev_med = mean(sev_l), sev_med_up = mean(icup), sev_med_low = mean(iclow)) 
+
+#wlb_ic |> 
+#  group_by(species, host) |> 
+#  summarize(mean_sev = mean(sev_med))
+
+#write_csv(wlb_ic, "sev.csv")
+
+wlb_ic <- read_csv("sev.csv")
+
+wlb_d1 = wlb2 %>%
+  group_by(species, host, code, rep) %>%
+  summarise(sev_leaf1 = mean(sev_leaf)) 
+
+
+```
+
+```{r}
+library(cowplot)
+
+#Plot 1
+  wlb_ci = ggplot() +
+  geom_jitter(data = wlb_d1, aes(x = reorder(code, -sev_leaf1), sev_leaf1), width = 0.1, shape = 21, size = 2, alpha = 0.4, color = "black") +
+  geom_errorbar(data = wlb_ic, aes(x = code, ymin = sev_med_low, ymax = sev_med_up, shape = species), width =0, size=0.7)+
+  geom_point(data = wlb_ic, aes(x = code, y = sev_med, shape = species), size=3) +
+  facet_wrap(~host, ncol = 1)+
+  scale_color_grey(name = "Lineage", labels = c("PoT", "Non-PoT")) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20))+
+  theme_minimal_grid() +
+  theme(panel.grid.major = element_line(linewidth = 0.5, linetype = 'solid',
+                                colour = "grey96"),
+        panel.grid.minor =  element_blank(), axis.text = element_text(size = 11, color = "black"), legend.position = "top", axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+    labs(x = "Isolates", y = "Leaf blast severity (%)", color = "", shape = "Species/lineage")
+
+ggsave("leaf_SevI_CI.png", bg = "white", dpi = 600, height = 6 , width = 6)
+wlb_ci
+```
+
+# Head infections
+
+```{r}
+raw = gsheet2tbl("https://docs.google.com/spreadsheets/d/1KnJ9N8jqKPMjCt8jCLv7OqYL9hLyYeK8wkGEBmlGSVI/edit?usp=sharing")
+raw_inf = raw %>% 
+  dplyr::select(code, year, State, city, host, distance_wheat,region, species) %>% 
+  dplyr::filter(year == "2018" | year == "2019" | year == "CHECK")
+raw_inf
+```
+
+#Head data
+
+##7. severity
+
+```{r}
+whb = gsheet2tbl("https://docs.google.com/spreadsheets/d/11Ltn68PMhMMeL1UszittYkB5_SKXAAkGUQDyMvdqiCs/edit#gid=965493567") %>% 
+  mutate("1" = (d1*100)/t1, "2" = (d2*100)/t2, "3" = (d3*100)/t3, "4" = (d4*100)/t4, "5" = (d5*100)/t5) %>% 
+  dplyr::select(1:4, 15:19) %>% 
+ tidyr::gather(key = "head", value = "sev", 5:9) 
+whb  
+  
+
+whb1 = full_join(whb, raw_inf, by = "code") %>% 
+  dplyr::select(species, test, host_inoculation, code, rep, head, sev ) %>%
+  filter(host_inoculation != "NA") %>% 
+  filter(code != "42", code != "132", code != "544", code != "607", code != "CHECK") %>% 
+  mutate(host = case_when(host_inoculation == "BR 18" ~ "BR 18-Terena",
+                          TRUE ~ host_inoculation)) %>%
+   mutate(sev = case_when(sev > 100 ~ 100,
+                          TRUE ~ sev)) %>% 
+  group_by(species, host, code, rep, head) %>% 
+  summarise(sev_head = mean(sev))
+ 
+whb1 |> 
+  group_by(species, host) |> 
+  summarise(mean_sev = mean(sev_head))
+```
+
+###CI
+
+``` {r}
+#whb_i = whb1 %>%
+#  group_by(species, host, code) %>%
+#  summarise(n = length(sev_head),
+#            sev_l = mean(sev_head),
+#            sev_sd = sd(sev_head),
+#            icup = sev_l + qt(0.975, n - 1)*sev_sd/sqrt(n),
+#            iclow = sev_l + qt(0.025, n - 1)*sev_sd/sqrt(n)) %>%
+#  mutate(icup = case_when(icup > 100 ~ 100,
+#                          TRUE ~ icup)) %>%
+#  group_by(species, host, code) %>%
+#  summarise(sev_med = mean(sev_l), sev_med_up = mean(icup), sev_med_low = mean(iclow)) 
+
+#write_csv(whb_i, "sev_head.csv")
+whb_i <- read_csv("sev_head.csv")
+
+whb_d1 = whb1 %>%
+  group_by(species, host, code, rep) %>%
+  summarise(sev_head = mean(sev_head))
+
+
+#Plot1
+  wb_ci = ggplot() +
+  geom_jitter(data = whb_d1, aes(x = reorder(code, -sev_head), sev_head), width = 0.1, shape = 21, size = 2, alpha = 0.4, color = "black") +
+  geom_errorbar(data = whb_i, aes(x = code, ymin = sev_med_low, ymax = sev_med_up, shape = species), width =0, size=0.7)+
+  geom_point(data = whb_i, aes(x = code, y = sev_med, shape = species), size=3) +
+  facet_wrap(~host, ncol = 1)+
+  scale_color_grey(name = "", labels = c("PoT", "PoU")) +
+  scale_y_continuous(limits=c(0, 100, by = 25))+
+  theme_minimal() +
+    scale_color_grey(name = "Lineage", labels = c("PoT", "Non-PoT")) +
+  theme(panel.grid.minor =  element_blank(), axis.text = element_text(size = 11, color = "black"), legend.position = "top", axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), legend.justification = "left") +
+  labs(x = "Isolates", y = "Head blast severity (%)", color = "", shape = "Species/lineage")
+
+ggsave("head_SevI_CI.png", dpi = 600, height = 5 , bg = "white", width = 6)
+wb_ci 
+
+```

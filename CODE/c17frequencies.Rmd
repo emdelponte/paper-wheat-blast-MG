@@ -1,0 +1,187 @@
+---
+title: "Untitled"
+author: "Emerson"
+date: "9/25/2021"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(gsheet)
+library(ggthemes)
+library(cowplot)
+library(peRReo)
+
+
+dat <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1KnJ9N8jqKPMjCt8jCLv7OqYL9hLyYeK8wkGEBmlGSVI/edit?usp=sharing")
+```
+
+
+## C17 by proximity to/in wheat
+
+```{r}
+library(janitor)
+library(ggthemes)
+p1 <- dat %>% 
+  filter(C17 != "NA") %>% 
+  filter(trip != "CHECK") %>% 
+   filter(host != "Oryzae sativa") %>% 
+  filter(trip != "-") %>% 
+  mutate(host2 = case_when(host == "Triticum aestivum" ~ "Wheat",
+                           TRUE ~ "Grass")) %>% 
+  ggplot(aes(host2, fill = C17 ))+
+  geom_bar(stat = "count") + 
+
+stat_count(geom = "text", 
+           colour = "grey90", 
+           size = 3,
+aes(label = ..count..),
+position=position_stack(vjust=0.8))+
+      theme_clean()+
+   theme(
+     legend.position = "bottom",
+         plot.background = element_rect(colour = "white"),
+        legend.background = element_rect(colour = "white"),
+        )+
+    scale_fill_calc() +
+  facet_wrap(~distance_wheat, scales =  "free_x")+
+  labs(y ="Number of isolates",
+       x = "Host", 
+       fill = "C17 amplification")
+ggsave("p2.png", width = 5, height = 5)
+```
+
+```{r}
+library(janitor)
+library(knitr)
+tab <- dat %>% 
+  filter(C17 != "NA") %>% 
+  filter(trip != "CHECK") %>% 
+  
+  filter(host != "Oryzae sativa") %>% 
+  filter(trip != "-") %>% 
+  mutate(host2 = case_when(host == "Triticum aestivum" ~ "Wheat",
+                           TRUE ~ "Grass")) %>% 
+  filter(host2 == "Grass") %>% 
+  filter(C17 == "+")
+
+
+library(patchwork)
+library(gridExtra)
+library(grid)
+tt3 <- ttheme_default(
+  core=list(
+            fg_params=list(fontface=3)),
+  colhead=list(fg_params=list(col="navyblue", fontface=4L)),
+  rowhead=list(fg_params=list(col="white", fontface=3L)))
+
+p1 
+```
+
+## Wheat: heads and leaves
+
+```{r}
+dat %>% 
+  filter(C17 != "NA") %>% 
+  filter(trip != "CHECK") %>% 
+  filter(host != "Oryzae sativa") %>% 
+  filter(trip != "-") %>% 
+  mutate(host2 = case_when(host == "Triticum aestivum" ~ "wheat",
+                           TRUE ~ "non-wheat")) %>% 
+  filter(host2 == "wheat") 
+
+```
+
+
+
+
+```{r}
+dat2 <- dat %>% 
+  filter(C17 != "NA") %>% 
+  filter(trip != "CHECK") %>% 
+   filter(host != "Oryzae sativa") %>% 
+  filter(trip != "-") %>% 
+  mutate(host2 = case_when(host == "Triticum aestivum" ~ "Wheat",
+                           TRUE ~ "Grass"))
+```
+
+
+```{r}
+pallet = latin_palette('aventura')
+nearby <- dat2 |> 
+  filter(distance_wheat == "Nearby") |>
+  ggplot(aes(host2, fill = C17))+
+  geom_bar(stat = "count", color = "white") + 
+  coord_polar("y", start=0) +
+  theme_void()+
+  stat_count(geom = "text", 
+           colour = "grey90", 
+           size = 5,
+aes(label = ..count..),
+position=position_stack(vjust= 0.5))+
+  labs(title = "Grass nearby wheat")+
+    theme(plot.title = element_text(hjust = 0.5))+
+  scale_fill_manual(values = c("#ff420e", "#004586"))
+nearby
+```
+
+```{r}
+away <- dat2 |> 
+  filter(distance_wheat == "Away") |>
+  ggplot(aes(host2, fill = C17))+
+  geom_bar(stat = "count", color = "white") + 
+  coord_polar("y", start=0) +
+  theme_void()+
+  stat_count(geom = "text", 
+           colour = "grey90", 
+           size = 5,
+aes(label = ..count..),
+position=position_stack(vjust= 0.5))+
+  labs(title = "Grass away from wheat")+
+    theme(plot.title = element_text(hjust = 0.5))+
+ scale_fill_manual(values = c("#ff420e", "#004586"))
+away
+```
+
+```{r}
+wheat <- dat2 |> 
+  filter(distance_wheat == "Wheat field") |>
+  ggplot(aes(host2, fill = C17 ))+
+  geom_bar(color = "white")+ 
+  coord_polar("y", start =0) +
+
+  theme_void()+
+  stat_count(geom = "text", 
+           colour = "grey90", 
+           size = 5,
+aes(label = ..count..),
+position=position_stack(vjust= 0.5))+
+  labs(title = "Wheat")+
+    theme(plot.title = element_text(hjust = 0.5))+
+ scale_fill_manual(values = c("#ff420e", "#004586"))
+wheat
+```
+
+
+
+```{r}
+library(patchwork)
+
+(away + nearby + wheat) + 
+
+  plot_layout(guides = 'collect')
+ggsave("pies.png", width =10)
+  
+
+```
+
+
+```{r}
+
+dat2 |> 
+  filter(distance_wheat != "Wheat field") |> 
+filter(lat == -19.39761069)
+
+
+```
+
+
